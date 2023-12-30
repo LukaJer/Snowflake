@@ -11,6 +11,7 @@ uint16_t randhue[NUMLEDS];
 uint8_t randbright[NUMLEDS];
 uint8_t direction[NUMLEDS]; // 1=rising, 0=falling
 uint8_t ledDisplay[] = {30, 29, 27, 28, 26, 5, 4, 2, 3, 1};
+double pureWhiteLimit=0.2,dynamicpureWhiteLimit=0.9;
 
 uint8_t mygamma(uint8_t value);
 uint8_t mygamma2(uint8_t value);
@@ -21,6 +22,7 @@ void expandRainbowAsync();
 void expand();
 void fullRainbow();
 void singleRainbow();
+void armsRainbow();
 
 tinyNeoPixel leds = tinyNeoPixel(NUMLEDS, PIN_PA5, NEO_GRB);
 
@@ -36,6 +38,7 @@ void setup()
 	PORTA.PIN1CTRL = 0b00000010; // NOPULLUP = 0, ISC = 2 trigger rising
 	leds.begin();
 	leds.clear();
+	leds.show();
 	for (int h = 0; h < NUMLEDS; h++)
 	{
 		randhue[h] = random(65535);
@@ -43,7 +46,7 @@ void setup()
 		direction[h] = random(2);
 	}
 	sei();
-	Serial.println("Hi :)");
+	// Serial.println("Hi :)");
 }
 
 void loop()
@@ -68,7 +71,7 @@ void loop()
 		case 1:
 			for (int i = 0; i < NUMLEDS; i++)
 			{
-				leds.setPixelColor(i, maxBrightness, maxBrightness, maxBrightness);
+				leds.setPixelColor(i, maxBrightness*pureWhiteLimit, maxBrightness*pureWhiteLimit, maxBrightness*pureWhiteLimit);
 			}
 			leds.show();
 			break;
@@ -93,9 +96,28 @@ void loop()
 		case 8:
 			singleRainbow();
 			break;
+		case 9:
+			armsRainbow();
+			break;
 		}
 	}
 	delay(speed);
+}
+
+uint8_t mygamma(uint8_t value)
+{
+	const float maxBrightnessFloat = static_cast<float>(maxBrightness);
+	return round((value - 1) * pow(value / maxBrightnessFloat, 5/dynamicpureWhiteLimit)*dynamicpureWhiteLimit + 1);
+}
+
+uint8_t mysin(uint8_t value)
+{
+	return round(maxBrightness / 2 * (1 - cos(value / 40.055)));
+}
+
+uint8_t mygamma2(uint8_t value)
+{
+	return round((maxBrightness - 2) * pow(value / 255.0, 1/dynamicpureWhiteLimit)*dynamicpureWhiteLimit + 2);
 }
 
 void twinkle()
@@ -123,41 +145,30 @@ void twinkle()
 	leds.show();
 }
 
-uint8_t mygamma(uint8_t value)
-{
-	const float maxBrightnessFloat = static_cast<float>(maxBrightness);
-	return round((value-2) * pow(value / maxBrightnessFloat, 5)+2);
-}
-
-uint8_t mysin(uint8_t value)
-{
-	return round(maxBrightness / 2 * (1 - cos(value / 40.055)));
-}
-
-uint8_t mygamma2(uint8_t value)
-{
-	return round((maxBrightness - 10) * pow(value / 255.0, 1)) + 10;
-}
-
 void expand()
 {
 	static uint8_t wave;
+	static uint8_t val;
+	val = mygamma2(mysin(wave));
 	for (int i = 0; i < NUMLEDS; i += 5)
 	{
-		leds.setPixelColor(i, leds.ColorHSV(0, 0, mygamma2(wave)));
+		leds.setPixelColor(i, val, val, val);
 	}
+	val = mygamma2(mysin(wave + 50));
 	for (int i = 1; i < NUMLEDS; i += 5)
 	{
-		leds.setPixelColor(i, leds.ColorHSV(0, 0, mygamma2(wave + 10)));
-		leds.setPixelColor(i + 1, leds.ColorHSV(0, 0, mygamma2(wave + 10)));
+		leds.setPixelColor(i, val, val, val);
+		leds.setPixelColor(i + 1, val, val, val);
 	}
+	val = mygamma2(mysin(wave + 75));
 	for (int i = 3; i < NUMLEDS; i += 5)
 	{
-		leds.setPixelColor(i, leds.ColorHSV(0, 0, mygamma2(wave + 20)));
+		leds.setPixelColor(i, val, val, val);
 	}
+	val = mygamma2(mysin(wave + 100));
 	for (int i = 4; i < NUMLEDS; i += 5)
 	{
-		leds.setPixelColor(i, leds.ColorHSV(0, 0, mysin(wave + 30)));
+		leds.setPixelColor(i, val, val, val);
 	}
 	wave = wave + 10;
 	leds.show();
@@ -259,12 +270,40 @@ void singleRainbow()
 	leds.show();
 }
 
+void armsRainbow()
+{
+	for (int i = 0; i <= 6; i++)
+	{
+		if (randbright[i] >= maxBrightness)
+		{
+			direction[i] = 0;
+		}
+		if (randbright[i] <= 1)
+		{
+			randhue[i] = random(65535);
+			direction[i] = 1;
+		}
+
+		if (direction[i])
+			randbright[i] = randbright[i] + 1;
+		else
+			randbright[i] = randbright[i] - 1;
+
+		for (int j = (i * 5); j < (i*5 + 5); j++)
+		{
+			leds.setPixelColor(j, leds.ColorHSV(randhue[i], 255, randbright[i]));
+		}
+	}
+
+	leds.show();
+}
+
 ISR(PORTA_PORT_vect)
 {
 	byte flags = PORTA.INTFLAGS;
 	PORTA.INTFLAGS = flags; // clear flags
 	mode = mode + 1;
-	if (mode > 8)
+	if (mode > 9)
 	{
 		mode = 0;
 	}
